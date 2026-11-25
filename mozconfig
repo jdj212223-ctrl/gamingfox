@@ -1,0 +1,31 @@
+# GamingFox build settings (read by Firefox's build tool, "mach").
+
+ac_add_options --enable-application=browser
+ac_add_options --enable-bootstrap          # mach downloads the right compilers itself
+ac_add_options --enable-release
+ac_add_options --enable-optimize
+ac_add_options --enable-hardening
+ac_add_options --disable-debug
+ac_add_options --disable-tests
+
+# Our name and look, not Firefox's.
+ac_add_options --with-app-name=gamingfox
+ac_add_options --with-app-basename=GamingFox
+ac_add_options --with-branding=browser/branding/gamingfox
+ac_add_options MOZ_APP_PROFILE=gamingfox            # its own profile folder (~/.gamingfox)
+ac_add_options MOZ_APP_REMOTINGNAME=gamingfox       # window class / "open in running browser"
+
+# No telemetry, no crash uploads, no built-in updater (updates come as new releases / Hollow OS updates).
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+ac_add_options MOZ_TELEMETRY_REPORTING=
+ac_add_options MOZ_REQUIRE_SIGNING=
+
+# Add-ons we ship next to the browser are allowed (uBlock Origin is installed by policy).
+ac_add_options --with-unsigned-addon-scopes=app,system
+ac_add_options --allow-addon-sideload
+
+# Re-use compiled pieces from the last build (makes rebuilds much faster).
+ac_add_options --with-ccache=sccache
+
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-gamingfox

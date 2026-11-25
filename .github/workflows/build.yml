@@ -1,0 +1,173 @@
+# Builds GamingFox from Mozilla's Firefox source code in GitHub Actions (not on your computer),
+# tests that it starts (a screenshot of the start page), and publishes a release with the .tar.xz and .rpm.
+name: Build GamingFox
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+    inputs:
+      firefox_version:
+        description: "Firefox version to build on (leave empty for the newest)"
+        required: false
+  schedule: [{ cron: "0 6 * * 3" }]   # every Wednesday: rebuild if Mozilla released a new Firefox (security fixes)
+concurrency: { group: gamingfox-build, cancel-in-progress: false }
+permissions: { contents: write }
+env:
+  SCCACHE_DIR: /gf/sccache
+  SCCACHE_CACHE_SIZE: 6G
+  SCCACHE_IDLE_TIMEOUT: "0"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      skip: ${{ steps.v.outputs.skip }}
+    steps:
+      - id: v
+        name: Which Firefox version?
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: ${{ inputs.firefox_version }}
+        run: |
+          v="${WANTED:-$(curl -fsSL https://product-details.mozilla.org/1.0/firefox_versions.json | jq -r .LATEST_FIREFOX_VERSION)}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          skip=false
+          if [ "${{ github.event_name }}" = schedule ] && \
+             gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep -q "^v$v-"; then
+            skip=true   # already built this Firefox version
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "Building on Firefox $v (skip=$skip)"
+
+  # Compiling Firefox takes hours. If the first job runs out of time, the second carries on from where it stopped.
+  compile-1:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      done: ${{ steps.build.outputs.done }}
+    steps: &compile
+      - run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - name: Make room (Firefox needs a lot of disk)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /usr/local/julia* /opt/az /usr/local/share/powershell \
+            /usr/local/share/chromium /opt/microsoft /opt/google /usr/lib/jvm || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          # Work on the bigger disk, always at the same path (/gf) so the compile cache matches between runs.
+          if [ -d /mnt ] && [ "$(df --output=avail /mnt | tail -1)" -gt "$(df --output=avail / | tail -1)" ]; then
+            sudo mkdir -p /mnt/gf /gf && sudo mount --bind /mnt/gf /gf
+          else
+            sudo mkdir -p /gf
+          fi
+          sudo chown "$USER" /gf
+          df -h / /mnt /gf || true
+      - name: More memory (swap)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 12G /gf/swap && sudo chmod 600 /gf/swap && sudo mkswap /gf/swap && sudo swapon /gf/swap
+          free -h
+      - name: Tools for the icons
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+      - name: Compiler cache (pieces from earlier builds)
+        uses: actions/cache/restore@v4
+        with:
+          path: /gf/sccache
+          key: sccache-${{ needs.prepare.outputs.version }}-${{ github.run_id }}-${{ github.job }}
+          restore-keys: |
+            sccache-${{ needs.prepare.outputs.version }}-
+            sccache-
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - id: build
+        name: Compile GamingFox
+        run: |
+          # Leave ~45 minutes for packing up and saving the cache before GitHub's 6-hour limit.
+          used=$(( ($(date +%s) - JOB_START) / 60 ))
+          scripts/ci-compile.sh "${{ needs.prepare.outputs.version }}" $(( 305 - used ))
+      - name: Save the compiler cache (even if time ran out)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /gf/sccache
+          key: sccache-${{ needs.prepare.outputs.version }}-${{ github.run_id }}-${{ github.job }}
+      - name: Keep the browser for the next step
+        if: steps.build.outputs.done == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamingfox-tarball
+          path: out/*.tar.xz
+          compression-level: 0
+          retention-days: 7
+
+  compile-2:
+    needs: [prepare, compile-1]
+    if: needs.compile-1.outputs.done != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      done: ${{ steps.build.outputs.done }}
+    steps: *compile
+
+  package:
+    needs: [prepare, compile-1, compile-2]
+    if: always() && (needs.compile-1.outputs.done == 'true' || needs.compile-2.outputs.done == 'true')
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:45
+    steps:
+      - name: Tools
+        run: dnf -y install --setopt=install_weak_deps=False git tar xz rpm-build findutils gh dejavu-sans-fonts google-noto-sans-fonts util-linux shadow-utils
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: gamingfox-tarball, path: out }
+      - name: Build the .rpm
+        run: |
+          V="${{ needs.prepare.outputs.version }}"
+          T=$(ls "$PWD"/out/gamingfox-*.tar.xz)
+          # The browser's own libraries (libxul.so etc.) must not be looked for in other packages.
+          privlibs="^($(tar -tJf "$T" | grep -E '\.so$' | xargs -n1 basename | sort -u | paste -sd'|'))"
+          rpmbuild -bb packaging/gamingfox.spec \
+            --define "_topdir $PWD/rpmbuild" \
+            --define "gf_version $V" --define "gf_release ${{ github.run_number }}" \
+            --define "gf_tarball $T" --define "gf_root $PWD" --define "gf_privlibs $privlibs"
+          cp rpmbuild/RPMS/x86_64/*.rpm out/
+          ls -lh out
+      - name: Install the .rpm on Fedora and check it starts (screenshot of the start page)
+        run: |
+          dnf -y install out/*.rpm
+          rpm -q --requires gamingfox
+          gamingfox --version
+          useradd -m tester
+          mkdir -p /tmp/shots && chmod 777 /tmp/shots
+          runuser -u tester -- bash -c '
+            set -e
+            mkdir -p /tmp/p1 /tmp/p2
+            timeout 180 gamingfox --headless --profile /tmp/p1 --window-size=1280,800 \
+              --screenshot /tmp/shots/start-page.png file:///usr/lib64/gamingfox/start.html
+            timeout 180 gamingfox --headless --profile /tmp/p2 --window-size=1280,900 \
+              --screenshot /tmp/shots/policies.png about:policies || true
+          '
+          test -s /tmp/shots/start-page.png
+          cp /tmp/shots/*.png out/
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with: { name: gamingfox, path: out/, compression-level: 0 }
+      - name: Release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          git config --global --add safe.directory "$PWD"
+          V="${{ needs.prepare.outputs.version }}"
+          tag="v$V-${{ github.run_number }}"
+          (cd out && sha256sum *.tar.xz *.rpm > SHA256SUMS)
+          gh release create "$tag" out/*.tar.xz out/*.rpm out/SHA256SUMS out/*.png \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "GamingFox $V (build ${{ github.run_number }})" \
+            --notes "GamingFox built from Mozilla's Firefox $V source code.
+
+          - **Hollow OS / Fedora:** \`sudo dnf install ./gamingfox-$V-${{ github.run_number }}.x86_64.rpm\`
+          - **Any Linux:** unpack the .tar.xz and run \`gamingfox/gamingfox\`.
+
+          start-page.png is the screenshot taken by the automatic test.
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)"

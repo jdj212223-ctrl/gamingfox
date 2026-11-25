@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=GamingFox
+GenericName=Web Browser
+Comment=The gaming browser: fast video, no ads, no telemetry, easy on RAM
+Exec=gamingfox %u
+Icon=gamingfox
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=gamingfox
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=New window
+Exec=gamingfox --new-window %u
+
+[Desktop Action new-private-window]
+Name=New private window
+Exec=gamingfox --private-window %u

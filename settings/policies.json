@@ -1,0 +1,27 @@
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableDefaultBrowserAgent": true,
+    "DontCheckDefaultBrowser": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "FirefoxHome": { "SponsoredTopSites": false, "SponsoredPocket": false, "SponsoredStories": false, "Pocket": false, "Snippets": false, "Stories": false },
+    "FirefoxSuggest": { "SponsoredSuggestions": false, "ImproveSuggest": false },
+    "UserMessaging": { "MoreFromMozilla": false, "FeatureRecommendations": false, "ExtensionRecommendations": false, "SkipOnboarding": true },
+    "ManagedBookmarks": [
+      { "toplevel_name": "Games" },
+      { "name": "Steam Store", "url": "https://store.steampowered.com" },
+      { "name": "ProtonDB (will my game run?)", "url": "https://www.protondb.com" },
+      { "name": "Hollow Hours", "url": "https://github.com/jdj212223-ctrl/hollow-hours/releases" },
+      { "name": "Modrinth (Minecraft mods)", "url": "https://modrinth.com" }
+    ],
+    "ExtensionSettings": {
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "normal_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
+      }
+    }
+  }
+}
