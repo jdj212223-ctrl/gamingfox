@@ -21,5 +21,10 @@ find "$B" -name '*.png' | while read -r png; do
     --left $(( (w - s) / 2 )) --top $(( (h - s) / 2 )) "$GF/branding/gamingfox.svg" -o "$png"
 done
 
+# Settings only Firefox's own browser config may set: our vendor name and our own profile folder (~/.gamingfox).
+grep -q 'imply_option("MOZ_APP_VENDOR", "Mozilla")' "$SRC/browser/moz.configure"
+sed -i 's/imply_option("MOZ_APP_VENDOR", "Mozilla")/imply_option("MOZ_APP_VENDOR", "Hollow")/' "$SRC/browser/moz.configure"
+grep -q 'MOZ_APP_PROFILE' "$SRC/browser/moz.configure" || echo 'imply_option("MOZ_APP_PROFILE", "gamingfox")' >> "$SRC/browser/moz.configure"
+
 cp "$GF/mozconfig" "$SRC/mozconfig"
 echo "GamingFox branding applied to $B"

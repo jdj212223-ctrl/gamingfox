@@ -12,7 +12,6 @@ ac_add_options --disable-tests
 ac_add_options --with-app-name=gamingfox
 ac_add_options --with-app-basename=GamingFox
 ac_add_options --with-branding=browser/branding/gamingfox
-ac_add_options MOZ_APP_PROFILE=gamingfox            # its own profile folder (~/.gamingfox)
 ac_add_options MOZ_APP_REMOTINGNAME=gamingfox       # window class / "open in running browser"
 
 # No telemetry, no crash uploads, no built-in updater (updates come as new releases / Hollow OS updates).
