@@ -43,8 +43,11 @@ jobs:
           sudo swapoff -a || true
           sudo fallocate -l 12G /gf/swap && sudo chmod 600 /gf/swap && sudo mkswap /gf/swap && sudo swapon /gf/swap
           free -h
-      - name: Tools for the icons
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin imagemagick icnsutils zip unzip
+      - name: Tools (icons, Windows SDK unpacker, Rust targets)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin imagemagick icnsutils zip unzip msitools
+          # Rust's standard library for the other computer types (Windows / Apple Silicon Mac).
+          rustup target add x86_64-pc-windows-msvc aarch64-apple-darwin
       - name: Compiler cache (pieces from earlier builds)
         uses: actions/cache/restore@v4
         with:
