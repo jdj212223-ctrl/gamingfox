@@ -160,7 +160,10 @@ jobs:
           V="${{ needs.prepare.outputs.version }}"
           tag="v$V-${{ github.run_number }}"
           (cd out && sha256sum *.tar.xz *.rpm > SHA256SUMS)
-          gh release create "$tag" out/*.tar.xz out/*.rpm out/SHA256SUMS out/*.png \
+          # GitHub's API sometimes answers "HTTP 500": try up to 5 times (cleaning up a half-made release in between).
+          for try in 1 2 3 4 5; do
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            if gh release create "$tag" out/*.tar.xz out/*.rpm out/SHA256SUMS out/*.png \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "GamingFox $V (build ${{ github.run_number }})" \
             --notes "GamingFox built from Mozilla's Firefox $V source code.
@@ -170,4 +173,7 @@ jobs:
 
           start-page.png is the screenshot taken by the automatic test.
 
-          🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)"; then exit 0; fi
+            echo "Release failed (try $try), retrying in 30 s"; sleep 30
+          done
+          exit 1
