@@ -44,7 +44,8 @@ grep -q 'MOZ_APP_PROFILE' "$SRC/browser/moz.configure" || echo 'imply_option("MO
 cp "$GF/mozconfig" "$SRC/mozconfig"
 # Which computer it's for: linux (default), windows or mac (both built on Linux, "cross-compiled").
 case "${TARGET:-linux}" in
-  windows) echo 'ac_add_options --target=x86_64-pc-windows-msvc' >> "$SRC/mozconfig" ;;
+  windows) printf '%s\n' 'ac_add_options --target=x86_64-pc-windows-msvc' \
+                         'ac_add_options --disable-debug-symbols   # lighter on memory' 'mk_add_options MOZ_PARALLEL_BUILD=3' >> "$SRC/mozconfig" ;;
   mac)     printf '%s\n' 'ac_add_options --target=aarch64-apple-darwin' \
                          'ac_add_options MOZ_PKG_FORMAT=TAR   # the .dmg is made on a real Mac afterwards' >> "$SRC/mozconfig" ;;
 esac
