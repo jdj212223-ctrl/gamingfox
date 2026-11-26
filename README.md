@@ -16,8 +16,13 @@ tuned for gaming PCs. It's the browser in [Hollow OS](https://github.com/jdj2122
 
 Get it from [Releases](https://github.com/jdj212223-ctrl/gamingfox/releases):
 
-- **Fedora / Hollow OS:** `sudo dnf install ./gamingfox-*.x86_64.rpm`
-- **Any Linux (x86_64):** unpack `gamingfox-*.linux-x86_64.tar.xz` and run `gamingfox/gamingfox`.
+| Computer | File | How |
+|---|---|---|
+| Hollow OS / Fedora | `gamingfox-*.x86_64.rpm` | `sudo dnf install ./gamingfox-*.x86_64.rpm` (Hollow OS has it built in) |
+| Ubuntu / Debian / Mint | `gamingfox_*_amd64.deb` | double-click, or `sudo apt install ./gamingfox_*_amd64.deb` |
+| Any Linux (x86_64) | `gamingfox-*.linux-x86_64.tar.xz` | unpack and run `gamingfox/gamingfox` |
+| Windows 10/11 (64-bit) | `GamingFox-*-Setup.exe` (or the `.zip`) | run it; if Windows warns, **More info → Run anyway** (not signed) |
+| Mac with Apple Silicon (M1+) | `GamingFox-*-mac-arm64.dmg` | drag to Applications, then **right-click → Open** the first time (not signed by Apple); on macOS 15+: **System Settings → Privacy & Security → Open Anyway** |
 
 ## How it's built
 
@@ -25,11 +30,12 @@ Everything is built by GitHub Actions ([`.github/workflows/build.yml`](.github/w
 
 1. Downloads the newest Firefox source code from Mozilla and checks its checksum.
 2. Adds GamingFox's branding ([`branding/`](branding)) and build settings ([`mozconfig`](mozconfig)).
-3. Compiles (a few hours; a compiler cache makes later builds much faster). If GitHub's 6-hour limit is reached, a
-   second job carries on where the first stopped.
+3. Compiles for Linux, Windows and Mac at the same time, all on Linux machines (Windows and Mac are "cross-compiled").
+   A compiler cache makes later builds much faster. If GitHub's 6-hour limit is reached, a second job carries on.
 4. Adds our settings ([`settings/`](settings)): `gamingfox.cfg` (gaming tweaks + Game Mode), `policies.json`
    (uBlock Origin, no telemetry), and the start page.
-5. Makes the `.rpm`, installs it on Fedora, takes a screenshot of the start page to prove it starts, and publishes a release.
+5. Makes the `.rpm`, `.deb`, Windows installer and Mac `.dmg`, installs each on a real Fedora, Ubuntu, Windows and Mac
+   machine, takes a screenshot of the start page to prove it starts, and publishes them all in one release.
 
 Every Wednesday it checks for a new Firefox release and rebuilds, so security fixes arrive quickly.
 

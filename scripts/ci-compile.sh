@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compiles GamingFox inside GitHub Actions. Usage: scripts/ci-compile.sh <firefox-version> <minutes-allowed>
+# Compiles GamingFox inside GitHub Actions. Usage: TARGET=linux|windows|mac scripts/ci-compile.sh <firefox-version> <minutes-allowed>
 # If time runs out it stops cleanly and says done=false; the next job carries on (the compiled pieces are
 # kept in the sccache folder, so the second try only compiles what is left).
 set -euo pipefail
@@ -41,13 +41,26 @@ if [ $rc -eq 124 ] || [ $rc -eq 130 ] || [ $rc -eq 137 ]; then
 fi
 [ $rc -eq 0 ] || exit $rc
 
-# 5. Pack it up: the browser folder + our settings, policies and start page.
+# 5. Pack it up: the browser + our settings, policies and start page.
 ./mach package
-pkg=$(ls obj-gamingfox/dist/gamingfox-*.tar.* | head -1)
-rm -rf /gf/pkg && mkdir -p /gf/pkg
-tar -xf "$pkg" -C /gf/pkg
-"$GF/scripts/add-settings.sh" /gf/pkg/gamingfox
-mkdir -p "$GITHUB_WORKSPACE/out"
-tar -C /gf/pkg -cJf "$GITHUB_WORKSPACE/out/gamingfox-$V.linux-x86_64.tar.xz" gamingfox
+TARGET="${TARGET:-linux}"
+rm -rf /gf/pkg && mkdir -p /gf/pkg "$GITHUB_WORKSPACE/out"
+case "$TARGET" in
+  linux)
+    tar -xf "$(ls obj-gamingfox/dist/gamingfox-*.tar.* | head -1)" -C /gf/pkg
+    "$GF/scripts/add-settings.sh" /gf/pkg/gamingfox
+    tar -C /gf/pkg -cJf "$GITHUB_WORKSPACE/out/gamingfox-$V.linux-x86_64.tar.xz" gamingfox ;;
+  windows)
+    (cd /gf/pkg && unzip -q "$SRC/$(ls obj-gamingfox/dist/gamingfox-*.zip | head -1)")
+    "$GF/scripts/add-settings.sh" /gf/pkg/gamingfox
+    for s in 16 24 32 48 64 128 256; do rsvg-convert -w $s -h $s "$GF/branding/gamingfox.svg" -o /gf/ico-$s.png; done
+    convert /gf/ico-{16,24,32,48,64,128,256}.png /gf/pkg/gamingfox/gamingfox.ico   # for the installer
+    (cd /gf/pkg && zip -qr9 "$GITHUB_WORKSPACE/out/gamingfox-$V.windows-x86_64.zip" gamingfox) ;;
+  mac)
+    tar -xf "$(ls obj-gamingfox/dist/gamingfox-*.tar | head -1)" -C /gf/pkg
+    app=$(find /gf/pkg -maxdepth 3 -name '*.app' -type d | head -1)
+    "$GF/scripts/add-settings.sh" "$app/Contents/Resources"
+    tar -C "$(dirname "$app")" -cJf "$GITHUB_WORKSPACE/out/gamingfox-$V.mac-arm64.app.tar.xz" "$(basename "$app")" ;;
+esac
 ls -lh "$GITHUB_WORKSPACE/out"
 out "done=true"

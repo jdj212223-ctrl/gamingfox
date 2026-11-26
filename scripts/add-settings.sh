@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Adds GamingFox's settings, policies and start page into the finished browser folder.
-# Usage: scripts/add-settings.sh /path/to/gamingfox   (the folder that holds the "gamingfox" program)
+# Usage: scripts/add-settings.sh <folder>
+#   Linux/Windows: the folder that holds the gamingfox program. Mac: GamingFox.app/Contents/Resources
 set -euo pipefail
 GF="$(cd "$(dirname "$0")/.." && pwd)"
 D="$1"

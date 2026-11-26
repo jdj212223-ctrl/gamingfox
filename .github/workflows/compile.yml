@@ -1,0 +1,77 @@
+# One compile of GamingFox for one computer type (linux / windows / mac), all on a Linux runner.
+# Called by build.yml. If it runs out of time it says done=false and build.yml runs it a second time,
+# which carries on from the compiler cache.
+name: Compile (called by build.yml)
+on:
+  workflow_call:
+    inputs:
+      target: { type: string, required: true }    # linux | windows | mac
+      version: { type: string, required: true }   # Firefox version
+      attempt: { type: string, required: true }   # 1 or 2
+    outputs:
+      done:
+        value: ${{ jobs.compile.outputs.done }}
+env:
+  SCCACHE_DIR: /gf/sccache
+  SCCACHE_CACHE_SIZE: 3G
+  SCCACHE_IDLE_TIMEOUT: "0"
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      done: ${{ steps.build.outputs.done }}
+    steps:
+      - run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - name: Make room (Firefox needs a lot of disk)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /usr/local/julia* /opt/az /usr/local/share/powershell \
+            /usr/local/share/chromium /opt/microsoft /opt/google /usr/lib/jvm || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          # Work on the bigger disk, always at the same path (/gf) so the compile cache matches between runs.
+          if [ -d /mnt ] && [ "$(df --output=avail /mnt | tail -1)" -gt "$(df --output=avail / | tail -1)" ]; then
+            sudo mkdir -p /mnt/gf /gf && sudo mount --bind /mnt/gf /gf
+          else
+            sudo mkdir -p /gf
+          fi
+          sudo chown "$USER" /gf
+          df -h / /mnt /gf || true
+      - name: More memory (swap)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 12G /gf/swap && sudo chmod 600 /gf/swap && sudo mkswap /gf/swap && sudo swapon /gf/swap
+          free -h
+      - name: Tools for the icons
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin imagemagick icnsutils zip unzip
+      - name: Compiler cache (pieces from earlier builds)
+        uses: actions/cache/restore@v4
+        with:
+          path: /gf/sccache
+          key: sccache-${{ inputs.target }}-${{ inputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.attempt }}
+          restore-keys: |
+            sccache-${{ inputs.target }}-${{ inputs.version }}-
+            sccache-${{ inputs.target }}-
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - id: build
+        name: Compile GamingFox (${{ inputs.target }})
+        env: { TARGET: "${{ inputs.target }}" }
+        run: |
+          # Leave ~45 minutes for packing up and saving the cache before GitHub's 6-hour limit.
+          used=$(( ($(date +%s) - JOB_START) / 60 ))
+          scripts/ci-compile.sh "${{ inputs.version }}" $(( 305 - used ))
+      - name: Save the compiler cache (even if time ran out)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /gf/sccache
+          key: sccache-${{ inputs.target }}-${{ inputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.attempt }}
+      - name: Keep the result for the next step
+        if: steps.build.outputs.done == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ inputs.target }}
+          path: out/*
+          compression-level: 0
+          retention-days: 7
